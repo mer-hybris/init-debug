@@ -1,34 +1,64 @@
 #!/bin/sh
+
+# Boot with the kernel command line options
+# init=/init-debug [debug-ip=192.168.2.2]
+
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
-echo "hello from /init"
+set +e
+echo "Mer debug init"
+# get ip from kernel command line if we passed it
+gip() { while [ ! -z $1 ]; do echo $1 | { IFS== read a v; [ $a == "debug-ip" ] && echo $v; }; shift; done }
+# helpers
 write() {
         echo -n "$2" > $1
 }
-mount -t tmpfs tmpfs /boot
-mount -t sysfs sysfs /sys
+usb_info() {
     write /sys/class/android_usb/android0/enable 0
     write /sys/class/android_usb/android0/idVendor 18D1
     write /sys/class/android_usb/android0/idProduct D001
     write /sys/class/android_usb/android0/functions rndis
     write /sys/class/android_usb/android0/iManufacturer Mer
-    write /sys/class/android_usb/android0/iProduct Debugger
+    write /sys/class/android_usb/android0/iProduct $1
     write /sys/class/android_usb/android0/iSerial 123456789
     write /sys/class/android_usb/android0/enable 1
-ifconfig usb0 10.42.0.5
-/bin/umount -n /sys
+}
 
-/sbin/busybox telnetd -l/bin/sh &
+# Mount some needed fs - systemd should not mind that these were
+# pre-mounted
+echo "Mounting init-debug filesystems"
+
+# Some minimal stuff so we can really try to get telnet up.
+# /boot to store /boot/systemd_stdouterr
+mount -t tmpfs tmpfs /boot
+# /sys to control the usb gadget
+mount -t sysfs sysfs /sys
+# /proc to grab the IP address from /proc/cmdline
+mount -t proc proc /proc
+# telnetd needs /dev/pts/ entries
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts  
+
+# Now we have /proc
+IP=$(gip $(cat /proc/cmdline))
+# Sane default
+: ${IP:=192.168.2.2}
+
+echo "Setting IP to $IP"
+usb_info Mer_Debug_telnet_on_rndis_$IP
+ifconfig usb0 $IP
+ifconfig rndis0 $IP
+
+echo "Starting telnetd"
+/bin/busybox telnetd -l/bin/sh &
 
 sleep 5
 exec /sbin/init --log-level=debug --log-target=kmsg &> /boot/systemd_stdouterr
 
-    write /sys/class/android_usb/android0/enable 0
-    write /sys/class/android_usb/android0/idVendor 18D1
-    write /sys/class/android_usb/android0/idProduct D001
-    write /sys/class/android_usb/android0/functions rndis
-    write /sys/class/android_usb/android0/iManufacturer Mer
-    write /sys/class/android_usb/android0/iProduct failed_to_start_init
-    write /sys/class/android_usb/android0/iSerial 66666666
-    write /sys/class/android_usb/android0/enable 1
+# Resetting the usb may drop the config so just to be safe:
+usb_info Mer_failed_to_start_init_telnet_on_$IP
+ifconfig usb0 $IP
+ifconfig rndis0 $IP
+
+/sbin/busybox telnetd -l/bin/sh &
 
 sleep 86400
