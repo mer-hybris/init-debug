@@ -1,0 +1,14 @@
+Name: init-debug
+Summary: A tiny init that starts a telnetd on a usb0 then starts init
+Version: 0.1
+Release: 1
+Group: System
+License: GPLv2
+Builder: none
+Configure: none
+Sources:
+    - '%{name}-%{version}.tar.bz2'
+Requires:
+  - busybox
+Files:
+  - '%attr(755,root,root) /init-debug'
